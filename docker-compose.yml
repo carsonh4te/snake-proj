@@ -1,0 +1,57 @@
+services:
+  # --- The Messenger (MQTT Broker) ---
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: snake-mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"     # MQTT port
+      - "9001:9001"     # Websocket port
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+
+  # --- The Brain (Logic & Dashboard) ---
+  nodered:
+    image: nodered/node-red:latest
+    container_name: snake-brain
+    restart: unless-stopped
+    privileged: true    # CRITICAL: Allows access to Hardware/GPIO
+    user: root          # Required to access hardware pins on some boards
+    ports:
+      - "1880:1880"
+    environment:
+      - TZ=America/New_York
+    volumes:
+      - /mnt/sdcard/node_red_data:/data
+    depends_on:
+      - mosquitto
+      - influxdb
+
+  # --- The Memory (Database) ---
+  influxdb:
+    image: influxdb:1.8
+    container_name: snake-db
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    volumes:
+      - /mnt/sdcard/influxdb_data:/var/lib/influxdb
+
+  # --- UPDATED BRIDGE SERVICE ---
+  bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile.bridge
+    container_name: snake-bridge
+    restart: unless-stopped
+    # THE OFFICIAL FIX: Map m4-proxy to the host gateway
+    extra_hosts:
+      - "m4-proxy:host-gateway"
+    depends_on:
+      - mosquitto
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
