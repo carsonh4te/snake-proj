@@ -46,7 +46,12 @@ else
     fi
 fi
 
-# 3. Create Data Directories & Fix Permissions
+# 3. CLEANUP: Free Disk Space & RAM (Crucial Fix for EOF Errors)
+echo "--- Cleaning up Docker Resources ---"
+sudo docker container prune -f
+sudo docker image prune -f
+
+# 4. Create Data Directories & Fix Permissions
 echo "--- Configuring Storage Directories ---"
 sudo mkdir -p "$SD_MOUNT/node_red_data"
 sudo mkdir -p "$SD_MOUNT/influxdb_data"
@@ -55,23 +60,21 @@ echo "--- Setting Permissions ---"
 sudo chmod -R 777 "$SD_MOUNT/node_red_data"
 sudo chmod -R 777 "$SD_MOUNT/influxdb_data"
 
-# 4. Restart M4 Proxy (Fixes Stale Connections)
+# 5. Restart M4 Proxy (Fixes Stale Connections)
 echo "--- Restarting M4 Proxy Service ---"
 sudo systemctl restart m4-proxy
 
-# 5. Low-Memory Deployment Strategy (With Retries)
-# We pull manually with retries to handle 'Unexpected EOF' errors
-
+# 6. Low-Memory Deployment Strategy (With Retries)
 pull_with_retry "eclipse-mosquitto:2"
-pull_with_retry "influxdb:1.8"
+# CHANGED: Use Alpine for smaller size and better reliability
+pull_with_retry "influxdb:1.8-alpine" 
 pull_with_retry "nodered/node-red:latest"
 
 echo "--- Building Bridge Container ---"
 sudo docker compose build bridge
 
-# 6. Launch Docker Stack
+# 7. Launch Docker Stack
 echo "--- LAUNCHING CONTAINERS ---"
-# Everything is pulled/built, so 'up' should be instant and safe
 sudo docker compose up -d
 
 echo "========================================"
