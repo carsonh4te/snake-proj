@@ -7,6 +7,26 @@ echo "========================================"
 echo "    SNAKE ENCLOSURE SETUP INITIATED     "
 echo "========================================"
 
+# --- 0. Helper Function: Robust Pull ---
+pull_with_retry() {
+    local image=$1
+    local max_attempts=5
+    local attempt=1
+
+    echo "--- Pulling $image (Attempt $attempt/$max_attempts) ---"
+    until sudo docker pull "$image"; do
+        if [ $attempt -eq $max_attempts ]; then
+            echo "FAILED: Could not pull $image after $max_attempts attempts."
+            exit 1
+        fi
+        echo "WARNING: Pull failed (EOF/Network). Retrying in 5 seconds..."
+        sleep 5
+        ((attempt++))
+        echo "--- Pulling $image (Attempt $attempt/$max_attempts) ---"
+    done
+    echo "SUCCESS: $image downloaded."
+}
+
 # 1. Define Paths
 PROJECT_DIR="/home/fio/snake_project"
 SD_MOUNT="/mnt/sdcard"
@@ -39,26 +59,19 @@ sudo chmod -R 777 "$SD_MOUNT/influxdb_data"
 echo "--- Restarting M4 Proxy Service ---"
 sudo systemctl restart m4-proxy
 
-# 5. Low-Memory Deployment Strategy
-# We pull and build everything explicitly BEFORE starting the stack.
-# This prevents the 'Unexpected EOF' crash caused by Docker running out of RAM.
+# 5. Low-Memory Deployment Strategy (With Retries)
+# We pull manually with retries to handle 'Unexpected EOF' errors
 
-echo "--- Step 1/4: Pulling MQTT Broker ---"
-sudo docker pull eclipse-mosquitto:2
+pull_with_retry "eclipse-mosquitto:2"
+pull_with_retry "influxdb:1.8"
+pull_with_retry "nodered/node-red:latest"
 
-echo "--- Step 2/4: Pulling Database ---"
-sudo docker pull influxdb:1.8
-
-echo "--- Step 3/4: Pulling Node-RED (Large) ---"
-sudo docker pull nodered/node-red:latest
-
-echo "--- Step 4/4: Building Bridge Container ---"
-# We build this separately so 'up' doesn't have to do it
+echo "--- Building Bridge Container ---"
 sudo docker compose build bridge
 
 # 6. Launch Docker Stack
 echo "--- LAUNCHING CONTAINERS ---"
-# Since everything is pulled and built, this just starts them instantly
+# Everything is pulled/built, so 'up' should be instant and safe
 sudo docker compose up -d
 
 echo "========================================"
