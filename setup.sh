@@ -10,7 +10,7 @@ echo "========================================"
 # --- 0. Helper Function: Robust Pull ---
 pull_with_retry() {
     local image=$1
-    local max_attempts=5
+    local max_attempts=10  # Increased to 10 for stubborn connections
     local attempt=1
 
     echo "--- Pulling $image (Attempt $attempt/$max_attempts) ---"
@@ -19,7 +19,7 @@ pull_with_retry() {
             echo "FAILED: Could not pull $image after $max_attempts attempts."
             exit 1
         fi
-        echo "WARNING: Pull failed (EOF/Network). Retrying in 5 seconds..."
+        echo "WARNING: Pull failed (EOF/Network/Arch). Retrying in 5 seconds..."
         sleep 5
         ((attempt++))
         echo "--- Pulling $image (Attempt $attempt/$max_attempts) ---"
@@ -46,7 +46,7 @@ else
     fi
 fi
 
-# 3. CLEANUP: Free Disk Space & RAM (Crucial Fix for EOF Errors)
+# 3. CLEANUP: Free Disk Space & RAM
 echo "--- Cleaning up Docker Resources ---"
 sudo docker container prune -f
 sudo docker image prune -f
@@ -60,14 +60,14 @@ echo "--- Setting Permissions ---"
 sudo chmod -R 777 "$SD_MOUNT/node_red_data"
 sudo chmod -R 777 "$SD_MOUNT/influxdb_data"
 
-# 5. Restart M4 Proxy (Fixes Stale Connections)
+# 5. Restart M4 Proxy
 echo "--- Restarting M4 Proxy Service ---"
 sudo systemctl restart m4-proxy
 
-# 6. Low-Memory Deployment Strategy (With Retries)
+# 6. Low-Memory Deployment Strategy
+# Reverting to influxdb:1.8 because alpine lacks ARM64 v8 manifest on some mirrors
 pull_with_retry "eclipse-mosquitto:2"
-# CHANGED: Use Alpine for smaller size and better reliability
-pull_with_retry "influxdb:1.8-alpine" 
+pull_with_retry "influxdb:1.8" 
 pull_with_retry "nodered/node-red:latest"
 
 echo "--- Building Bridge Container ---"

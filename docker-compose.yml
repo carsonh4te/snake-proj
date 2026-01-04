@@ -31,7 +31,7 @@ services:
 
   # --- The Memory (Database) ---
   influxdb:
-    image: influxdb:1.8-alpine
+    image: influxdb:1.8
     container_name: snake-db
     restart: unless-stopped
     ports:
