@@ -27,33 +27,39 @@ else
 fi
 
 # 3. Create Data Directories & Fix Permissions
-# This is crucial for Node-RED and InfluxDB to work without permission errors
 echo "--- Configuring Storage Directories ---"
 sudo mkdir -p "$SD_MOUNT/node_red_data"
 sudo mkdir -p "$SD_MOUNT/influxdb_data"
 
-# Ensure generic user access (simplifies Docker user mapping issues)
 echo "--- Setting Permissions ---"
 sudo chmod -R 777 "$SD_MOUNT/node_red_data"
 sudo chmod -R 777 "$SD_MOUNT/influxdb_data"
 
-# 4. Convert Line Endings (Just in case git config didn't catch it)
-# This prevents the dreaded ^M errors if you edited on Windows
-echo "--- Normalizing Line Endings ---"
-sed -i 's/\r$//' docker-compose.yml
-sed -i 's/\r$//' rpc_bridge.py
-sed -i 's/\r$//' Dockerfile.bridge
-sed -i 's/\r$//' mosquitto.conf
-
-# 5. Restart M4 Proxy (Fixes Stale Connections)
+# 4. Restart M4 Proxy (Fixes Stale Connections)
 echo "--- Restarting M4 Proxy Service ---"
 sudo systemctl restart m4-proxy
 
+# 5. Low-Memory Deployment Strategy
+# We pull and build everything explicitly BEFORE starting the stack.
+# This prevents the 'Unexpected EOF' crash caused by Docker running out of RAM.
+
+echo "--- Step 1/4: Pulling MQTT Broker ---"
+sudo docker pull eclipse-mosquitto:2
+
+echo "--- Step 2/4: Pulling Database ---"
+sudo docker pull influxdb:1.8
+
+echo "--- Step 3/4: Pulling Node-RED (Large) ---"
+sudo docker pull nodered/node-red:latest
+
+echo "--- Step 4/4: Building Bridge Container ---"
+# We build this separately so 'up' doesn't have to do it
+sudo docker compose build bridge
+
 # 6. Launch Docker Stack
-echo "--- Launching Docker Containers ---"
-# Pull images sequentially to prevent crash on low-memory devices
-sudo docker compose pull --ignore-pull-failures
-sudo docker compose up -d --build
+echo "--- LAUNCHING CONTAINERS ---"
+# Since everything is pulled and built, this just starts them instantly
+sudo docker compose up -d
 
 echo "========================================"
 echo "         DEPLOYMENT COMPLETE            "
